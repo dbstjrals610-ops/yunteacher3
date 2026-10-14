@@ -19,11 +19,12 @@ table{border-collapse:collapse;width:100%;font-size:.9rem}
 th,td{border:1px solid var(--bd);padding:4px 6px;text-align:center;white-space:nowrap}
 th{background:var(--bg)}
 tr.avg td,tr.avg th{font-weight:700;background:var(--bg)}
-input[type=number],input[type=text]{width:100%;min-width:62px;padding:7px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font-size:1rem}
+input[type=number],input[type=text],input[type=password]{width:100%;min-width:62px;padding:7px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font-size:1rem}
 button{padding:8px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;font-size:.95rem;cursor:pointer;font-family:inherit}
 button.ghost{background:transparent;color:var(--ac);border:1px solid var(--ac)}
 button.del{background:transparent;color:var(--mut);border:1px solid var(--bd);padding:3px 8px;font-size:.8rem}
 button.danger{background:#b42318}
+button.armed{background:#b42318;color:#fff;border-color:#b42318}
 button:disabled{opacity:.45;cursor:not-allowed}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .badge{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:1px 6px;font-size:.78rem}
@@ -33,6 +34,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .net{background:var(--warnbg);color:var(--warn);padding:8px 12px;font-size:.88rem;text-align:center}
 #insight p{margin:6px 0;font-size:.95rem}
 svg text{fill:var(--mut);font-size:12px}
+.clsrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}
+.clsrow button{background:transparent;color:var(--tx);border:1px solid var(--bd);padding:10px 0;font-size:1.05rem}
+.clsrow button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
 /* 입장 화면 */
 .join{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
 .join .card{width:100%;max-width:440px;text-align:center;padding:28px 20px}
@@ -57,11 +61,18 @@ svg text{fill:var(--mut);font-size:12px}
  <div class="card">
   <div style="font-size:2.4rem">🧪</div>
   <h1>용수철 탄성력 측정하기</h1>
-  <p class="sub">모둠 이름을 입력하고 입장하세요.</p>
+  <p class="sub">반을 고르고 모둠 이름을 입력하세요.</p>
+  <div class="clsrow" id="jcls"></div>
   <input type="text" id="jname" maxlength="12" placeholder="예: 3모둠" autocomplete="off">
   <button class="go" id="jgo">입장</button>
   <div id="jmsg" class="sub" style="margin:8px 0 0"></div>
   <div id="chipsWrap" hidden><p class="sub" style="margin:14px 0 0">이미 만들어진 모둠 (눌러서 입장)</p><div class="chips" id="chips"></div></div>
+  <div style="margin-top:22px"><button class="del" id="tLink">교사 로그인</button></div>
+  <div id="tBox" hidden style="margin-top:10px">
+   <input type="password" id="tpin" placeholder="교사 암호" autocomplete="off">
+   <button class="go" id="tgo">로그인</button>
+   <div id="tmsg" class="sub" style="margin:8px 0 0"></div>
+  </div>
  </div>
 </section>
 
@@ -73,9 +84,12 @@ svg text{fill:var(--mut);font-size:12px}
  <div class="row" style="margin:0"><label for="renIn">새 모둠 이름</label><input type="text" id="renIn" maxlength="12" autocomplete="off" style="max-width:180px"><button id="renSave">저장</button><button class="ghost" id="renCancel">취소</button></div>
  <div id="renMsg" class="sub" style="margin:8px 0 0"></div>
 </div>
-<p class="sub">디지털 용수철저울로 측정한 힘(N)을 입력하면 학급 전체 그래프에 반영됩니다. (약 5초마다 자동 갱신)</p>
 
-<section class="card">
+<section class="card" id="tp" hidden></section>
+
+<p class="sub">디지털 용수철저울로 측정한 힘(N)을 입력하면 우리 반 그래프에 반영됩니다. (약 5초마다 자동 갱신)</p>
+
+<section class="card" id="c-input">
 <h2>1. 우리 모둠 결과 입력</h2>
 <div class="scroll"><table id="form"><thead><tr><th>늘어난 길이(cm)</th><th>3</th><th>6</th><th>9</th><th>12</th><th>15</th></tr></thead><tbody></tbody></table></div>
 <div class="row" style="margin-top:10px"><button id="send">결과 제출</button><span id="msg"></span></div>
@@ -109,8 +123,6 @@ svg text{fill:var(--mut);font-size:12px}
 <h2>5. 우리 반 결과 살펴보기</h2>
 <div id="insight"></div>
 </section>
-
-<section class="card" id="tp" hidden></section>
 </main>
 <div id="bar">
  <div class="t"><b id="prog"></b><div class="pills" id="pills"></div></div>
@@ -119,16 +131,20 @@ svg text{fill:var(--mut);font-size:12px}
 
 <script>
 /* ===== 설정 =====
-   Firebase Realtime Database 주소를 입력하세요. (끝에 / 없이)
-   예: "https://my-class-default-rtdb.asia-southeast1.firebasedatabase.app"
-   비워 두면 '체험 모드'(이 기기에만 저장)로 동작합니다. */
-const DB_URL = "https://yunteacher-6914e-default-rtdb.asia-southeast1.firebasedatabase.app/";
+   1) DB_URL: Firebase Realtime Database 주소 (끝에 / 없이)
+      예: "https://my-class-default-rtdb.asia-southeast1.firebasedatabase.app"
+      비워 두면 '체험 모드'(이 기기에만 저장)로 동작합니다.
+   2) TEACHER_PIN:sciencelove 교사 로그인 암호 (예: "7391"). 비워 두면 교사 로그인이 막혀 있습니다.
+      ※ 이 값은 페이지 소스에서 볼 수 있으므로, 학생이 알기 어려운 값으로 정하세요.
+   3) CLASSES: 반 목록 */
+const DB_URL = "";
+const TEACHER_PIN = "";
+const CLASSES = [1,2,3,4,5,6,7,8];
 const POLL_MS = 5000;
 /* ================= */
 
 const L=[3,6,9,12,15];
 const $=id=>document.getElementById(id);
-const teacher=new URLSearchParams(location.search).get("teacher")==="1";
 function el(tag,attrs,...kids){const e=document.createElement(tag);for(const [k,v] of Object.entries(attrs||{})){if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e[k]=v;else e.setAttribute(k,v)}for(const c of kids)if(c!=null)e.append(c);return e}
 const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
 const med=a=>{const s=a.filter(x=>x!=null).sort((x,y)=>x-y);if(!s.length)return null;const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
@@ -136,6 +152,7 @@ const fit=ys=>{let sxy=0,sxx=0;ys.forEach((y,i)=>{if(y!=null){sxy+=L[i]*y;sxx+=L
 const f2=v=>v==null?"-":v.toFixed(2);
 const num=v=>{const n=parseFloat(v);return isFinite(n)?n:null};
 const keyOf=n=>n.replace(/\s+/g,"").replace(/[.$#\[\]\/]/g,"_").slice(0,12);
+const teamKey=(cls,name)=>cls+"_"+keyOf(name);
 const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h};
 const color=s=>`hsl(${hue(s)} 65% 48%)`;
 
@@ -156,7 +173,15 @@ const API={
 /* ===== 상태 ===== */
 let S={teams:{},results:{}},sig="",loaded=false;
 let me=null;try{me=JSON.parse(localStorage.getItem("me")||"null")}catch(e){}
+if(me&&!me.cls)me=null;
 let view="join",joinedAt=0,prefilled=false;
+let jsel=null;try{jsel=Number(localStorage.getItem("lastCls"))||null}catch(e){}
+let tCls=1;try{tCls=Number(localStorage.getItem("tCls"))||CLASSES[0]}catch(e){}
+const isTeacher=()=>{try{return TEACHER_PIN!==""&&localStorage.getItem("tOK")===TEACHER_PIN}catch(e){return false}};
+const curCls=()=>isTeacher()?tCls:(me?me.cls:null);
+const sameCls=(v,c)=>!!v&&String(v.cls)===String(c);
+const teamsOf=c=>Object.entries(S.teams).filter(([k,v])=>sameCls(v,c)).sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));
+const hasResult=k=>{const r=S.results[k];return !!r&&normTrials(r.data&&r.data.trials).flat().some(v=>v!=null)};
 
 function setNet(ok){const n=$("net");n.hidden=ok&&DB_URL!=="";if(!DB_URL){n.hidden=false;n.textContent="체험 모드: DB_URL이 설정되지 않아 이 기기(브라우저)에만 저장됩니다. 학급 공유는 설정 후 사용하세요."}else if(!ok){n.hidden=false;n.textContent="데이터베이스에 연결할 수 없습니다. 네트워크 또는 DB 설정을 확인하세요."}}
 async function refresh(){
@@ -169,34 +194,64 @@ async function refresh(){
  }catch(e){setNet(false)}
 }
 function onData(){
- if(me&&view!=="join"&&Date.now()-joinedAt>8000&&!S.teams[me.key]){me=null;localStorage.removeItem("me");$("jname").value="";$("jmsg").textContent="모둠 정보가 초기화되었습니다. 다시 입장하세요.";show("join");return}
+ if(!isTeacher()&&me&&view!=="join"&&Date.now()-joinedAt>8000&&!S.teams[me.key]){me=null;localStorage.removeItem("me");$("jname").value="";$("jmsg").textContent="모둠 정보가 삭제되었어요. 다시 입장하세요.";show("join");return}
  if(view==="join")renderChips();
  if(view==="dash"){renderDash();prefill()}
 }
+function setTitle(){
+ $("dtitle").textContent=isTeacher()?`교사 화면 · ${tCls}반`:`학급 결과 대시보드 · ${me.cls}반 ${me.name}`;
+}
 function show(v){view=v;["join","dash"].forEach(x=>$("v-"+x).hidden=x!==v);window.scrollTo(0,0);
- if(v==="join")renderChips();
- if(v==="dash"){$("dtitle").textContent="학급 결과 대시보드 · "+me.name;renderDash();prefill()}}
+ if(v==="join"){renderCls();renderChips()}
+ if(v==="dash"){
+  const T=isTeacher();
+  $("c-input").hidden=T;$("renBtn").hidden=T;$("renRow").hidden=true;
+  $("leave").textContent=T?"교사 로그아웃":"모둠 변경";
+  setTitle();renderDash();prefill();
+ }}
 
 /* ===== 입장 ===== */
+function renderCls(){
+ const box=$("jcls");box.innerHTML="";
+ CLASSES.forEach(c=>box.append(el("button",{class:jsel===c?"on":"",text:c+"반",onclick:()=>{jsel=c;try{localStorage.setItem("lastCls",String(c))}catch(e){}$("jmsg").textContent="";renderCls();renderChips();$("jname").focus()}})));
+}
 function renderChips(){
- const t=Object.entries(S.teams).sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));const box=$("chips");box.innerHTML="";
+ const box=$("chips");box.innerHTML="";
+ const t=jsel?teamsOf(jsel):[];
  $("chipsWrap").hidden=!t.length;
  t.forEach(([k,v])=>box.append(el("button",{class:"chip",text:String(v.name||k),onclick:()=>enter(String(v.name||k))})));
 }
 async function enter(raw){
  const name=raw.trim().replace(/\s+/g," ").slice(0,12),msg=$("jmsg");
+ if(!jsel){msg.textContent="반을 먼저 선택하세요.";return}
  if(!name){msg.textContent="모둠 이름을 입력하세요.";return}
- const key=keyOf(name);
+ const cls=jsel,key=teamKey(cls,name);
  try{
   const ex=S.teams[key],nm=ex?String(ex.name):name;
-  await API.put("teams/"+key,{name:nm,ts:ex?ex.ts:Date.now()});
-  me={key,name:nm};localStorage.setItem("me",JSON.stringify(me));joinedAt=Date.now();prefilled=false;sig="";
+  await API.put("teams/"+key,{name:nm,cls,ts:ex?ex.ts:Date.now()});
+  me={key,name:nm,cls};localStorage.setItem("me",JSON.stringify(me));joinedAt=Date.now();prefilled=false;sig="";
   await refresh();show("dash");
  }catch(e){msg.textContent="입장 실패: DB 주소 또는 보안 규칙 설정을 확인하세요."}
 }
 $("jgo").onclick=()=>enter($("jname").value);
 $("jname").addEventListener("keydown",e=>{if(e.key==="Enter")enter($("jname").value)});
-$("leave").onclick=()=>{me=null;localStorage.removeItem("me");$("jname").value="";$("jmsg").textContent="";show("join")};
+$("leave").onclick=()=>{
+ if(isTeacher()){try{localStorage.removeItem("tOK")}catch(e){}}
+ me=null;localStorage.removeItem("me");$("jname").value="";$("jmsg").textContent="";show("join")};
+
+/* --- 교사 로그인 --- */
+$("tLink").onclick=()=>{const b=$("tBox");b.hidden=!b.hidden;$("tmsg").textContent="";if(!b.hidden)$("tpin").focus()};
+function teacherLogin(){
+ const m=$("tmsg");
+ if(TEACHER_PIN===""){m.textContent="교사 암호가 설정되지 않았어요. index.html 맨 위의 TEACHER_PIN에 암호를 입력해 올리세요.";return}
+ if($("tpin").value!==TEACHER_PIN){m.textContent="암호가 맞지 않아요.";return}
+ try{localStorage.setItem("tOK",TEACHER_PIN)}catch(e){m.textContent="이 브라우저에서는 로그인 상태를 저장할 수 없어요.";return}
+ $("tpin").value="";me=null;localStorage.removeItem("me");show("dash");
+}
+$("tgo").onclick=teacherLogin;
+$("tpin").addEventListener("keydown",e=>{if(e.key==="Enter")teacherLogin()});
+
+/* --- 모둠 이름 수정 --- */
 $("renBtn").onclick=()=>{const r=$("renRow");r.hidden=!r.hidden;$("renMsg").textContent="";if(!r.hidden){$("renIn").value=me?me.name:"";$("renIn").focus()}};
 $("renCancel").onclick=()=>{$("renRow").hidden=true};
 $("renIn").addEventListener("keydown",e=>{if(e.key==="Enter")renameTeam()});
@@ -206,15 +261,15 @@ async function renameTeam(){
  const name=$("renIn").value.trim().replace(/\s+/g," ").slice(0,12);
  if(!name){msg.textContent="새 모둠 이름을 입력하세요.";return}
  if(name===me.name){msg.textContent="현재 이름과 같아요.";return}
- const oldKey=me.key,newKey=keyOf(name);
+ const oldKey=me.key,newKey=teamKey(me.cls,name);
  if(newKey!==oldKey&&S.teams[newKey]){msg.textContent="이미 있는 모둠 이름이에요. 다른 이름을 입력하세요.";return}
  $("renSave").disabled=true;
  try{
-  const t=S.teams[oldKey];await API.put("teams/"+newKey,{name,ts:t&&t.ts?t.ts:Date.now()});
-  const r=S.results[oldKey];if(r)await API.put("results/"+newKey,{...r,team:name});
+  const t=S.teams[oldKey];await API.put("teams/"+newKey,{name,cls:me.cls,ts:t&&t.ts?t.ts:Date.now()});
+  const r=S.results[oldKey];if(r)await API.put("results/"+newKey,{...r,team:name,cls:me.cls});
   if(newKey!==oldKey){await API.del("results/"+oldKey);await API.del("teams/"+oldKey)}
-  me={key:newKey,name};localStorage.setItem("me",JSON.stringify(me));joinedAt=Date.now();sig="";
-  await refresh();$("dtitle").textContent="학급 결과 대시보드 · "+name;$("renRow").hidden=true;
+  me={key:newKey,name,cls:me.cls};localStorage.setItem("me",JSON.stringify(me));joinedAt=Date.now();sig="";
+  await refresh();setTitle();$("renRow").hidden=true;
   $("msg").textContent="모둠 이름을 '"+name+"'(으)로 바꿨어요.";
  }catch(e){msg.textContent="수정 실패: 네트워크 또는 DB 설정을 확인하세요."}
  $("renSave").disabled=false;
@@ -225,7 +280,8 @@ const tb=document.querySelector("#form tbody");
 for(let r=1;r<=3;r++){const tr=el("tr",{},el("th",{text:r+"회"}));L.forEach((_,i)=>tr.append(el("td",{},el("input",{type:"number",step:"0.01",min:"0",inputmode:"decimal","data-r":r-1,"data-c":i}))));tb.append(tr)}
 const normTrials=t=>[0,1,2].map(r=>L.map((_,c)=>{const v=t&&t[r]&&t[r][c];return(v===""||v==null||!isFinite(Number(v)))?null:Number(v)}));
 function rows(){
- return Object.entries(S.results).map(([key,v])=>{const trials=normTrials(v&&v.data&&v.data.trials);const avg=L.map((_,c)=>mean(trials.map(r=>r[c]).filter(x=>x!=null)));return{key,team:String((v&&v.team)||key),ts:(v&&v.ts)||0,trials,avg,k:fit(avg)}}).filter(r=>r.avg.some(a=>a!=null)).sort((a,b)=>a.ts-b.ts);
+ const c=curCls();
+ return Object.entries(S.results).filter(([k,v])=>sameCls(v,c)).map(([key,v])=>{const trials=normTrials(v&&v.data&&v.data.trials);const avg=L.map((_,i)=>mean(trials.map(r=>r[i]).filter(x=>x!=null)));return{key,team:String((v&&v.team)||key),ts:(v&&v.ts)||0,trials,avg,k:fit(avg)}}).filter(r=>r.avg.some(a=>a!=null)).sort((a,b)=>a.ts-b.ts);
 }
 function prefill(){
  if(prefilled||!me)return;const r=rows().find(x=>x.key===me.key);if(!r)return;
@@ -253,7 +309,7 @@ function draw(){
  if(cp.length)s+=`<polyline fill="none" stroke="var(--tx)" stroke-width="3" points="${cp.map(p=>p.join(",")).join(" ")}"/>`+cp.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="var(--tx)"/>`).join("");
  if(!V.length)s+=`<text x="${W/2}" y="${H/2}" text-anchor="middle">아직 제출된 결과가 없습니다</text>`;
  svg.innerHTML=s;
- $("stat").textContent=V.length?`제출 ${V.length}모둠 · 굵은 검은 선=우리 반 평균, 굵은 색 선=우리 모둠`:"";
+ $("stat").textContent=V.length?`제출 ${V.length}모둠 · 굵은 검은 선=우리 반 평균${me?", 굵은 색 선=우리 모둠":""}`:"";
  const lg=$("leg");lg.innerHTML="";V.forEach(v=>{const i=el("i");i.style.background=color(v.key);lg.append(el("span",{},i,v.team))});
  return{cm,k};
 }
@@ -288,10 +344,10 @@ function insight(cmk){
  add("💬 이야기해 볼까요?  ① 늘어난 길이가 2배가 되면 힘은 어떻게 되나요?  ② 그래프가 (0, 0)에서 시작하는 직선이 되는 까닭은 무엇일까요?  ③ 모둠마다 값이 조금씩 다른 까닭은 무엇일까요?");
 }
 function progress(){
- const keys=Object.keys(S.teams),done=keys.filter(k=>rows().some(r=>r.key===k)),miss=keys.filter(k=>!done.includes(k));
- const all=keys.length>0&&miss.length===0;
- $("prog").textContent=`제출 현황 ${done.length}/${keys.length}모둠`+(all?" · 모두 제출 완료!":"");
- const p=$("pills");p.innerHTML="";keys.sort((a,b)=>(S.teams[a].ts||0)-(S.teams[b].ts||0)).forEach(k=>p.append(el("span",{class:"pill"+(done.includes(k)?" ok":""),text:(done.includes(k)?"✓ ":"")+S.teams[k].name})));
+ const ts=teamsOf(curCls()),keys=ts.map(([k])=>k),done=keys.filter(hasResult);
+ const all=keys.length>0&&done.length===keys.length;
+ $("prog").textContent=`${curCls()}반 제출 현황 ${done.length}/${keys.length}모둠`+(all?" · 모두 제출 완료!":"");
+ const p=$("pills");p.innerHTML="";ts.forEach(([k,v])=>p.append(el("span",{class:"pill"+(done.includes(k)?" ok":""),text:(done.includes(k)?"✓ ":"")+v.name})));
 }
 $("showTeams").onchange=draw;$("showFit").onchange=draw;
 $("send").onclick=async()=>{
@@ -302,8 +358,8 @@ $("send").onclick=async()=>{
  if(flat.some(v=>v<0||v>50)){msg.textContent="0~50 N 범위의 값을 입력하세요.";return}
  $("send").disabled=true;
  try{
-  if(!S.teams[me.key])await API.put("teams/"+me.key,{name:me.name,ts:Date.now()});
-  await API.put("results/"+me.key,{team:me.name,ts:Date.now(),data:{trials}});msg.textContent="제출되었습니다. (다시 제출하면 덮어씁니다)";sig="";prefilled=true;refresh();
+  if(!S.teams[me.key])await API.put("teams/"+me.key,{name:me.name,cls:me.cls,ts:Date.now()});
+  await API.put("results/"+me.key,{team:me.name,cls:me.cls,ts:Date.now(),data:{trials}});msg.textContent="제출되었습니다. (다시 제출하면 덮어씁니다)";sig="";prefilled=true;refresh();
  }catch(e){msg.textContent="제출 실패: DB 주소 또는 보안 규칙 설정을 확인하세요."}
  $("send").disabled=false;
 };
@@ -312,25 +368,58 @@ $("csv").onclick=()=>{
  const V=rows(),out=[["모둠","구분",...L.map(x=>x+"cm")]];
  V.forEach(r=>{r.trials.forEach((t,i)=>out.push([r.team,(i+1)+"회",...t.map(v=>v==null?"":v)]));out.push([r.team,"평균",...r.avg.map(a=>a==null?"":a.toFixed(3))])});
  const cm=L.map((_,i)=>{const a=V.map(v=>v.avg[i]).filter(x=>x!=null);return a.length?mean(a):null});
- out.push(["학급","평균",...cm.map(a=>a==null?"":a.toFixed(3))]);
+ out.push([curCls()+"반","평균",...cm.map(a=>a==null?"":a.toFixed(3))]);
  const text="﻿"+out.map(r=>r.map(csvSafe).join(",")).join("\r\n");
- const a=el("a",{href:URL.createObjectURL(new Blob([text],{type:"text/csv;charset=utf-8"})),download:"용수철_탄성력_결과.csv"});document.body.append(a);a.click();a.remove();
+ const a=el("a",{href:URL.createObjectURL(new Blob([text],{type:"text/csv;charset=utf-8"})),download:`용수철_탄성력_결과_${curCls()}반.csv`});document.body.append(a);a.click();a.remove();
 };
+
+/* ===== 교사 도구 ===== */
+/* 확인창(confirm) 대신 '한 번 더 누르기' 방식: 첫 클릭 → 빨간 버튼으로 바뀜(4초) → 다시 누르면 실행 */
+function twoStep(text,cls,fn){
+ const b=el("button",{class:cls,text});let armed=false,t=null;
+ const reset=()=>{armed=false;b.textContent=text;b.classList.remove("armed")};
+ b.onclick=async()=>{
+  if(!armed){armed=true;b.textContent="한 번 더 누르면 삭제돼요";b.classList.add("armed");clearTimeout(t);t=setTimeout(reset,4000);return}
+  clearTimeout(t);b.disabled=true;
+  try{await fn()}catch(e){b.textContent="삭제 실패 (네트워크 확인)";setTimeout(()=>{b.disabled=false;reset()},2500);return}
+  b.disabled=false;reset();
+ };
+ return b;
+}
+async function deleteKeys(keys){
+ await Promise.all([...keys].flatMap(k=>[API.del("teams/"+k),API.del("results/"+k)]));
+ sig="";await refresh();
+}
+function keysOfClass(c){
+ const s=new Set();
+ Object.entries(S.teams).forEach(([k,v])=>{if(sameCls(v,c))s.add(k)});
+ Object.entries(S.results).forEach(([k,v])=>{if(sameCls(v,c))s.add(k)});
+ return s;
+}
 function teacherPanel(){
- const box=$("tp");box.hidden=!teacher;if(!teacher)return;box.innerHTML="";
- box.append(el("h2",{text:"교사 도구 (?teacher=1)"}));
- const keys=Object.keys(S.teams),done=new Set(rows().map(r=>r.key));
- keys.forEach(k=>box.append(el("div",{class:"row",style:"margin-bottom:6px"},el("span",{text:`${S.teams[k].name} · ${done.has(k)?"제출":"미제출"}`}),
-  el("button",{class:"del",text:"모둠 삭제",onclick:async()=>{if(confirm(S.teams[k].name+" 모둠과 기록을 삭제할까요?")){try{await Promise.all(["teams/","results/"].map(p=>API.del(p+k)));sig="";refresh()}catch(e){}}}}))));
- box.append(el("div",{class:"row"},
-  el("button",{class:"danger",text:"전체 초기화",onclick:async()=>{if(confirm("모든 모둠과 결과를 삭제합니다. 계속할까요?")){try{await Promise.all(["teams","results"].map(p=>API.del(p)));sig="";refresh()}catch(e){}}}})));
+ const box=$("tp"),T=isTeacher();box.hidden=!T;if(!T)return;box.innerHTML="";
+ box.append(el("h2",{text:"교사 도구"}));
+ const sw=el("div",{class:"clsrow"});
+ CLASSES.forEach(c=>{const ts=teamsOf(c),d=ts.filter(([k])=>hasResult(k)).length;
+  sw.append(el("button",{class:c===tCls?"on":"",text:`${c}반 (${d}/${ts.length})`,onclick:()=>{tCls=c;try{localStorage.setItem("tCls",String(c))}catch(e){}prefilled=true;setTitle();renderDash()}}))});
+ box.append(sw);
+ const ts=teamsOf(tCls);
+ if(!ts.length)box.append(el("p",{class:"sub",text:`${tCls}반에는 아직 입장한 모둠이 없어요.`}));
+ ts.forEach(([k,v])=>box.append(el("div",{class:"row",style:"margin-bottom:6px"},
+  el("span",{text:`${v.name} · ${hasResult(k)?"제출":"미제출"}`}),
+  twoStep("삭제","del",()=>deleteKeys([k])))));
+ box.append(el("div",{class:"row",style:"margin-top:8px"},
+  twoStep(`${tCls}반 전체 삭제`,"danger",()=>deleteKeys(keysOfClass(tCls))),
+  twoStep("모든 반 전체 삭제","danger",async()=>{await Promise.all(["teams","results"].map(p=>API.del(p)));sig="";await refresh()})));
+ box.append(el("p",{class:"sub",style:"margin:0",text:"수업이 끝나면 '○반 전체 삭제'를 눌러 다음 반을 준비하세요. 삭제한 데이터는 되돌릴 수 없어요. 필요하면 먼저 아래 'CSV로 저장'을 눌러 두세요."}));
 }
 
 /* ===== 시작 ===== */
 setNet(true);
 (async()=>{
  await refresh();
- if(me&&loaded&&S.teams[me.key]){joinedAt=Date.now();show("dash")}
+ if(isTeacher()){me=null;show("dash")}
+ else if(me&&loaded&&S.teams[me.key]){joinedAt=Date.now();show("dash")}
  else{if(me&&loaded){me=null;localStorage.removeItem("me")}show("join")}
  setInterval(()=>{if(!document.hidden)refresh()},POLL_MS);
 })();

@@ -68,7 +68,11 @@ svg text{fill:var(--mut);font-size:12px}
 <!-- 2. 대시보드 -->
 <section id="v-dash" class="view" hidden>
 <main>
-<div class="row" style="justify-content:space-between"><h1 id="dtitle">학급 결과 대시보드</h1><button class="ghost" id="leave">모둠 변경</button></div>
+<div class="row" style="justify-content:space-between"><h1 id="dtitle">학급 결과 대시보드</h1><div class="row" style="margin:0"><button class="ghost" id="renBtn">모둠 이름 수정</button><button class="ghost" id="leave">모둠 변경</button></div></div>
+<div class="card" id="renRow" hidden>
+ <div class="row" style="margin:0"><label for="renIn">새 모둠 이름</label><input type="text" id="renIn" maxlength="12" autocomplete="off" style="max-width:180px"><button id="renSave">저장</button><button class="ghost" id="renCancel">취소</button></div>
+ <div id="renMsg" class="sub" style="margin:8px 0 0"></div>
+</div>
 <p class="sub">디지털 용수철저울로 측정한 힘(N)을 입력하면 학급 전체 그래프에 반영됩니다. (약 5초마다 자동 갱신)</p>
 
 <section class="card">
@@ -193,6 +197,28 @@ async function enter(raw){
 $("jgo").onclick=()=>enter($("jname").value);
 $("jname").addEventListener("keydown",e=>{if(e.key==="Enter")enter($("jname").value)});
 $("leave").onclick=()=>{me=null;localStorage.removeItem("me");$("jname").value="";$("jmsg").textContent="";show("join")};
+$("renBtn").onclick=()=>{const r=$("renRow");r.hidden=!r.hidden;$("renMsg").textContent="";if(!r.hidden){$("renIn").value=me?me.name:"";$("renIn").focus()}};
+$("renCancel").onclick=()=>{$("renRow").hidden=true};
+$("renIn").addEventListener("keydown",e=>{if(e.key==="Enter")renameTeam()});
+$("renSave").onclick=renameTeam;
+async function renameTeam(){
+ const msg=$("renMsg");if(!me)return;
+ const name=$("renIn").value.trim().replace(/\s+/g," ").slice(0,12);
+ if(!name){msg.textContent="새 모둠 이름을 입력하세요.";return}
+ if(name===me.name){msg.textContent="현재 이름과 같아요.";return}
+ const oldKey=me.key,newKey=keyOf(name);
+ if(newKey!==oldKey&&S.teams[newKey]){msg.textContent="이미 있는 모둠 이름이에요. 다른 이름을 입력하세요.";return}
+ $("renSave").disabled=true;
+ try{
+  const t=S.teams[oldKey];await API.put("teams/"+newKey,{name,ts:t&&t.ts?t.ts:Date.now()});
+  const r=S.results[oldKey];if(r)await API.put("results/"+newKey,{...r,team:name});
+  if(newKey!==oldKey){await API.del("results/"+oldKey);await API.del("teams/"+oldKey)}
+  me={key:newKey,name};localStorage.setItem("me",JSON.stringify(me));joinedAt=Date.now();sig="";
+  await refresh();$("dtitle").textContent="학급 결과 대시보드 · "+name;$("renRow").hidden=true;
+  $("msg").textContent="모둠 이름을 '"+name+"'(으)로 바꿨어요.";
+ }catch(e){msg.textContent="수정 실패: 네트워크 또는 DB 설정을 확인하세요."}
+ $("renSave").disabled=false;
+}
 
 /* ===== 대시보드 ===== */
 const tb=document.querySelector("#form tbody");
